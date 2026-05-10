@@ -2,15 +2,11 @@ from fastapi import FastAPI
 from app.database.database import engine, Base
 from app.api import auth, chat
 import logging
-
-# تقليل اللوجز بشكل كبير
 logging.basicConfig(level=logging.WARNING)
 uvicorn_logger = logging.getLogger("uvicorn")
 uvicorn_logger.setLevel(logging.WARNING)
 uvicorn_access = logging.getLogger("uvicorn.access")
 uvicorn_access.setLevel(logging.WARNING)
-
-# إنشاء الجداول (مرة واحدة فقط)
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="NutriFit AI Coach API")
