@@ -44,9 +44,10 @@ def generate_coach_response(user_profile: dict, chat_history: list, user_message
         }
 
     except Exception as e:
-        print(f"AI Service Error: {e}")
+        error_msg = str(e)
+        print(f"AI Service Error: {error_msg}")
         return {
-            "reply": "عذراً، حدث خطأ مؤقت. حاول مرة أخرى.",
+            "reply": f"DEBUG ERROR: {error_msg}",
             "suggested_exercises": [],
             "video_urls": [],
         }
