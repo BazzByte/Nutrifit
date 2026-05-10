@@ -12,10 +12,16 @@ async def chat_with_coach(
     request: ChatRequest,
     db: Session = Depends(get_db)
 ):
-    history = db.query(Message).order_by(Message.timestamp.asc()).limit(10).all()
+    user_msg = Message(user_id=1, role="user", content=request.message)
+    db.add(user_msg)
+    db.commit()
+
+    history = db.query(Message).filter(
+        Message.user_id == 1
+    ).order_by(Message.timestamp.asc()).limit(10).all()
 
     user_profile = {
-        "name": request.name,
+        "name": request.name or "مستخدم",
         "age": request.age,
         "weight": request.weight,
         "height": request.height,
@@ -26,7 +32,11 @@ async def chat_with_coach(
         "dietary_preferences": request.dietary_preferences,
     }
 
-    ai_result = generate_coach_response(user_profile, history, request.message)
+    ai_result = generate_coach_response(user_profile, history[:-1], request.message)
+
+    model_msg = Message(user_id=1, role="model", content=ai_result.get("reply", ""))
+    db.add(model_msg)
+    db.commit()
 
     return ChatResponse(
         reply=ai_result.get("reply", "حدث خطأ، حاول مرة أخرى"),
