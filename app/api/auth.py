@@ -8,9 +8,12 @@ from datetime import timedelta
 
 router = APIRouter()
 
+
 @router.post("/register", response_model=UserResponse)
 def register(user: UserCreate, db: Session = Depends(get_db)):
     try:
+        print(f"📝 Register attempt - Name: {user.name} | Email: {user.email}")
+
         if user.email:
             existing_user = db.query(User).filter(User.email == user.email).first()
             if existing_user:
@@ -20,9 +23,12 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
                 )
 
         hashed_password = None
-        if user.password:
+        if user.password and str(user.password).strip() != "":
             hashed_password = get_password_hash(user.password)
+        else:
+            print("⚠️ No password provided - User created without password")
 
+        # إنشاء المستخدم الجديد
         db_user = User(
             email=user.email,
             hashed_password=hashed_password,
@@ -42,26 +48,27 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(db_user)
         
+        print(f"✅ User created successfully! ID: {db_user.id}")
         return db_user
 
-    except HTTPException as http_exc:
-        raise http_exc
-
+    except HTTPException as e:
+        raise e
     except Exception as e:
         print("❌ Register Error:")
         import traceback
         print(traceback.format_exc())
         
         raise HTTPException(
-            status_code=500,
+            status_code=500, 
             detail=f"Internal Server Error: {str(e)}"
         )
 
 
 @router.post("/login")
 def login(email: str, password: str, db: Session = Depends(get_db)):
+    """Login function - لسه زي ما هو (لو عايز نعدله قولي)"""
     user = db.query(User).filter(User.email == email).first()
-    if not user or not verify_password(password, user.hashed_password):
+    if not user or not user.hashed_password or not verify_password(password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
