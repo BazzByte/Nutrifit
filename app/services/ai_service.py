@@ -2,23 +2,24 @@ import json
 from google import genai
 from google.genai.types import SafetySetting, HarmCategory, HarmBlockThreshold, GenerateContentConfig
 from app.core.config import settings
+from app.prompts.coach_prompt import get_system_prompt
 
-client = None
+_client = None
 
 def get_ai_client():
-    global client
-    if client is None:
+    global _client
+    if _client is None:
         if not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY.strip() == "":
-            raise ValueError("GEMINI_API_KEY is not set!")
-        client = genai.Client(api_key=settings.GEMINI_API_KEY)
-    return client
+            raise ValueError("❌ GEMINI_API_KEY is missing in Environment Variables!")
+        _client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    return _client
 
 
 def generate_coach_response(user_profile: dict, chat_history: list, new_message: str):
     try:
-        ai_client = get_ai_client()
+        client = get_ai_client()
         
-        system_instruction = get_system_prompt(user_profile)   # لو موجود
+        system_instruction = get_system_prompt(user_profile)
 
         safety_settings = [
             SafetySetting(category=HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE),
@@ -42,7 +43,7 @@ def generate_coach_response(user_profile: dict, chat_history: list, new_message:
                 "parts": [{"text": msg.content if hasattr(msg, 'content') else str(msg)}]
             })
 
-        response = ai_client.models.generate_content(
+        response = client.models.generate_content(
             model="gemini-1.5-flash",
             contents=contents,
             config=generation_config,
@@ -52,11 +53,11 @@ def generate_coach_response(user_profile: dict, chat_history: list, new_message:
         return json.loads(response.text)
 
     except Exception as e:
-        print(f"❌ AI Error: {str(e)}")
+        print("❌ AI Service Error:")
         import traceback
         print(traceback.format_exc())
         return {
-            "reply": "عذراً , حدث خطأ في معالجة الرد. جرب مرة تانية.",
+            "reply": "عذراً، حدث خطأ في معالجة الرد. جرب مرة تانية.",
             "suggested_exercises": [],
             "video_urls": []
         }
