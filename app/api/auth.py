@@ -1,37 +1,52 @@
-import google.generativeai as genai
-import json
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from app.database.database import get_db
+from app.models.user import User
+from app.schemas.user_schema import UserCreate, UserResponse
+from app.core.security import get_password_hash, verify_password, create_access_token
+from jose import jwt, JWTError
 from app.core.config import settings
-from app.prompts.coach_prompt import get_system_prompt
 
-genai.configure(api_key=settings.GEMINI_API_KEY)
+router = APIRouter(prefix="/auth", tags=["Authentication"])
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
-safety_settings = [
-    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"},
-]
-
-def generate_coach_response(user_profile: dict, chat_history: list, new_message: str):
-    system_instruction = get_system_prompt(user_profile)
-    
-    model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
-        system_instruction=system_instruction,
-        safety_settings=safety_settings,
-        generation_config={"response_mime_type": "application/json"}
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
     )
-
-    formatted_history = [{"role": msg.role, "parts": [msg.content]} for msg in chat_history]
-    
-    chat = model.start_chat(history=formatted_history)
-    response = chat.send_message(new_message)
-    
     try:
-        return json.loads(response.text)
-    except:
-        return {
-            "reply": "عذراً، حدث خطأ في معالجة الرد. حاول مرة أخرى.",
-            "suggested_exercises": [],
-            "video_urls": []
-        }
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+@router.post("/register", response_model=UserResponse)
+def register(user: UserCreate, db: Session = Depends(get_db)):
+    if db.query(User).filter(User.email == user.email).first():
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    hashed_password = get_password_hash(user.password)
+    db_user = User(**user.dict(exclude={"password"}), hashed_password=hashed_password)
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+@router.post("/login")
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == form_data.username).first()
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Incorrect email or password")
+    
+    access_token = create_access_token(data={"sub": str(user.id)})
+    return {"access_token": access_token, "token_type": "bearer"}
