@@ -2,9 +2,9 @@ from pydantic import BaseModel
 from typing import Optional
 
 class UserCreate(BaseModel):
-    email: str                    
-    password: str
-    name: str
+    email: Optional[str] = None
+    password: Optional[str] = None
+    name: str                          
     age: Optional[int] = None
     gender: Optional[str] = None
     weight: Optional[float] = None
@@ -17,7 +17,7 @@ class UserCreate(BaseModel):
 
 class UserResponse(BaseModel):
     id: int
-    email: str
+    email: Optional[str] = None
     name: str
 
     class Config:
