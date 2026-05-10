@@ -1,50 +1,39 @@
-import json
 from google import genai
-from google.genai.types import SafetySetting, HarmCategory, HarmBlockThreshold, GenerateContentConfig
+from google.genai import types
 from app.core.config import settings
-from app.prompts.coach_prompt import get_system_prompt
+import os
 
-client = genai.Client(api_key=settings.GEMINI_API_KEY)
+class AIService:
+    def __init__(self):
+        self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        self.model = "gemini-2.0-flash"   
 
-def generate_coach_response(user_profile: dict, chat_history: list, new_message: str):
-    system_instruction = get_system_prompt(user_profile)
+    def generate_response(self, prompt: str, context: str = None) -> str:
+        try:
+            full_prompt = f"{context}\n\n{prompt}" if context else prompt
 
-    safety_settings = [
-        SafetySetting(category=HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE),
-        SafetySetting(category=HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE),
-        SafetySetting(category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE),
-        SafetySetting(category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=HarmBlockThreshold.BLOCK_ONLY_HIGH),
-    ]
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=[full_prompt]
+            )
+            
+            return response.text if response.text else "Sorry, I couldn't generate a response."
 
-    generation_config = GenerateContentConfig(
-        temperature=0.7,
-        max_output_tokens=2048,
-        response_mime_type="application/json",
-        safety_settings=safety_settings,
-        system_instruction=system_instruction
-    )
+        except Exception as e:
+            print("❌ Gemini API Error:")
+            import traceback
+            print(traceback.format_exc())
+            return "حدث خطأ أثناء توليد الرد. برجاء المحاولة مرة أخرى."
 
-    try:
-        contents = []
-        for msg in chat_history:
-            contents.append({
-                "role": msg.role if msg.role in ["user", "model"] else "user",
-                "parts": [{"text": msg.content}]
-            })
-
-        response = client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=contents,
-            config=generation_config,
-            parts=[{"text": new_message}]
-        )
-
-        return json.loads(response.text)
-
-    except Exception as e:
-        print(f"AI Error: {str(e)}")
-        return {
-            "reply": "عذراً , حدث خطأ في معالجة الرد. جرب مرة تانية.",
-            "suggested_exercises": [],
-            "video_urls": []
-        }
+    def generate_nutrition_plan(self, user_data: dict) -> str:
+        prompt = f"""
+        أنشئ خطة تغذية يومية مفصلة للشخص التالي:
+        الاسم: {user_data.get('name')}
+        العمر: {user_data.get('age')}
+        الوزن: {user_data.get('weight')} كجم
+        الطول: {user_data.get('height')} سم
+        الهدف: {user_data.get('goal')}
+        المعدات المتوفرة: {user_data.get('available_equipment')}
+        """
+        
+        return self.generate_response(prompt)
