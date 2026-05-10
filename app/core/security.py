@@ -1,49 +1,32 @@
-import json
-import re
-from google import genai
+import bcrypt
+from datetime import datetime, timedelta
+from jose import jwt
 from app.core.config import settings
-from app.prompts.coach_prompt import get_system_prompt
 
-client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
-def generate_coach_response(user_profile: dict, chat_history: list, user_message: str) -> dict:
-    try:
-        system_prompt = get_system_prompt(user_profile)
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return bcrypt.checkpw(
+        plain_password.encode("utf-8"),
+        hashed_password.encode("utf-8")
+    )
 
-        history = []
-        for msg in chat_history:
-            role = "user" if msg.role == "user" else "model"
-            history.append({"role": role, "parts": [{"text": msg.content}]})
 
-        full_message = f"{system_prompt}\n\nUser message: {user_message}"
-        contents = history + [{"role": "user", "parts": [{"text": full_message}]}]
+def get_password_hash(password: str) -> str:
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(
+        password.encode("utf-8"),
+        salt
+    ).decode("utf-8")
 
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=contents,
-        )
 
-        raw_text = response.text.strip()
-
-        json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-        if json_match:
-            result = json.loads(json_match.group())
-            return {
-                "reply": result.get("reply", raw_text),
-                "suggested_exercises": result.get("suggested_exercises", []),
-                "video_urls": result.get("video_urls", []),
-            }
-
-        return {
-            "reply": raw_text,
-            "suggested_exercises": [],
-            "video_urls": [],
-        }
-
-    except Exception as e:
-        print(f"AI Service Error: {e}")
-        return {
-            "reply": "عذراً، حدث خطأ في الاتصال بالذكاء الاصطناعي. حاول مرة أخرى.",
-            "suggested_exercises": [],
-            "video_urls": [],
-        }
+def create_access_token(data: dict) -> str:
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(
+        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    )
+    to_encode.update({"exp": expire})
+    return jwt.encode(
+        to_encode,
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM
+    )
