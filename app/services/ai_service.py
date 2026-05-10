@@ -19,7 +19,7 @@ def generate_coach_response(user_profile: dict, chat_history: list, user_message
         contents = history + [{"role": "user", "parts": [{"text": full_message}]}]
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-1.5-flash",
             contents=contents,
         )
 
