@@ -13,7 +13,6 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
-        # مهم: عشان يقبل متغيرات من Railway
         extra = "ignore"
 
 settings = Settings()
