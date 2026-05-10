@@ -1,39 +1,62 @@
+import json
 from google import genai
-from google.genai import types
+from google.genai.types import SafetySetting, HarmCategory, HarmBlockThreshold, GenerateContentConfig
 from app.core.config import settings
-import os
 
-class AIService:
-    def __init__(self):
-        self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
-        self.model = "gemini-2.0-flash"   
+client = None
 
-    def generate_response(self, prompt: str, context: str = None) -> str:
-        try:
-            full_prompt = f"{context}\n\n{prompt}" if context else prompt
+def get_ai_client():
+    global client
+    if client is None:
+        if not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY.strip() == "":
+            raise ValueError("GEMINI_API_KEY is not set!")
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    return client
 
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=[full_prompt]
-            )
-            
-            return response.text if response.text else "Sorry, I couldn't generate a response."
 
-        except Exception as e:
-            print("❌ Gemini API Error:")
-            import traceback
-            print(traceback.format_exc())
-            return "حدث خطأ أثناء توليد الرد. برجاء المحاولة مرة أخرى."
-
-    def generate_nutrition_plan(self, user_data: dict) -> str:
-        prompt = f"""
-        أنشئ خطة تغذية يومية مفصلة للشخص التالي:
-        الاسم: {user_data.get('name')}
-        العمر: {user_data.get('age')}
-        الوزن: {user_data.get('weight')} كجم
-        الطول: {user_data.get('height')} سم
-        الهدف: {user_data.get('goal')}
-        المعدات المتوفرة: {user_data.get('available_equipment')}
-        """
+def generate_coach_response(user_profile: dict, chat_history: list, new_message: str):
+    try:
+        ai_client = get_ai_client()
         
-        return self.generate_response(prompt)
+        system_instruction = get_system_prompt(user_profile)   # لو موجود
+
+        safety_settings = [
+            SafetySetting(category=HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE),
+            SafetySetting(category=HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE),
+            SafetySetting(category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold=HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE),
+            SafetySetting(category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=HarmBlockThreshold.BLOCK_ONLY_HIGH),
+        ]
+
+        generation_config = GenerateContentConfig(
+            temperature=0.7,
+            max_output_tokens=2048,
+            response_mime_type="application/json",
+            safety_settings=safety_settings,
+            system_instruction=system_instruction
+        )
+
+        contents = []
+        for msg in chat_history:
+            contents.append({
+                "role": msg.role if hasattr(msg, 'role') and msg.role in ["user", "model"] else "user",
+                "parts": [{"text": msg.content if hasattr(msg, 'content') else str(msg)}]
+            })
+
+        response = ai_client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=contents,
+            config=generation_config,
+            parts=[{"text": new_message}]
+        )
+
+        return json.loads(response.text)
+
+    except Exception as e:
+        print(f"❌ AI Error: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        return {
+            "reply": "عذراً , حدث خطأ في معالجة الرد. جرب مرة تانية.",
+            "suggested_exercises": [],
+            "video_urls": []
+        }
