@@ -1,38 +1,48 @@
-import json
-import re
-from google import genai
+from groq import Groq
 from app.core.config import settings
 from app.prompts.coach_prompt import get_system_prompt
+import json
+import re
 
-client = genai.Client(api_key=settings.GEMINI_API_KEY)
+client = Groq(api_key=settings.GROQ_API_KEY)
 
-def generate_coach_response(user_profile: dict, chat_history: list, user_message: str) -> dict:
+def generate_coach_response(user_profile: dict, chat_history: list, message: str) -> dict:
+    """
+    توليد رد كوتش NutriFit باستخدام Groq (Llama 3.3 70B) — مجاني وبدون حد يومي عملي
+    """
+    
+    system_prompt = get_system_prompt(user_profile)
+
+    
+    messages = [{"role": "system", "content": system_prompt}]
+
+    for msg in chat_history:
+        
+        role = "assistant" if msg.role == "model" else "user"
+        messages.append({"role": role, "content": msg.content})
+
+    
+    messages.append({"role": "user", "content": message})
+
     try:
-        system_prompt = get_system_prompt(user_profile)
-
-        history = []
-        for msg in chat_history:
-            role = "user" if msg.role == "user" else "model"
-            history.append({"role": role, "parts": [{"text": msg.content}]})
-
-        full_message = f"{system_prompt}\n\nرسالة المستخدم: {user_message}"
-        contents = history + [{"role": "user", "parts": [{"text": full_message}]}]
-
-        response = client.models.generate_content(
-            model="gemini-2.0-flash-lite",
-            contents=contents,
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",   
+            messages=messages,
+            max_tokens=1024,
+            temperature=0.7,
         )
 
-        raw_text = response.text.strip()
+        raw_text = response.choices[0].message.content.strip()
 
+         
         json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
         if json_match:
             try:
-                result = json.loads(json_match.group())
+                data = json.loads(json_match.group())
                 return {
-                    "reply": result.get("reply", raw_text),
-                    "suggested_exercises": result.get("suggested_exercises", []),
-                    "video_urls": result.get("video_urls", []),
+                    "reply": data.get("reply", ""),
+                    "suggested_exercises": data.get("suggested_exercises", []),
+                    "video_urls": data.get("video_urls", []),
                 }
             except json.JSONDecodeError:
                 pass
@@ -44,10 +54,8 @@ def generate_coach_response(user_profile: dict, chat_history: list, user_message
         }
 
     except Exception as e:
-        error_msg = str(e)
-        print(f"AI Service Error: {error_msg}")
         return {
-            "reply": f"DEBUG ERROR: {error_msg}",
+            "reply": f"عذراً، حدث خطأ مؤقت. حاول مرة أخرى. ({str(e)})",
             "suggested_exercises": [],
             "video_urls": [],
         }
