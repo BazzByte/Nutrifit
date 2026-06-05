@@ -7,9 +7,7 @@ import re
 client = Groq(api_key=settings.GROQ_API_KEY)
 
 def generate_coach_response(user_profile: dict, chat_history: list, message: str) -> dict:
-    """
-    توليد رد كوتش NutriFit باستخدام Groq (Llama 3.3 70B) — مجاني وبدون حد يومي عملي
-    """
+    
     
     system_prompt = get_system_prompt(user_profile)
 
