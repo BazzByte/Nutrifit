@@ -26,8 +26,8 @@ app.include_router(chat.router, prefix="/chat", tags=["chat"])
 
 @app.on_event("startup")
 def create_tables():
-    from app.database import Base, engine
-    from app.models import user, message  
+    from app.database.database import Base, engine  
+    from app.models import user, chat               
     Base.metadata.create_all(bind=engine)
     print("✅ Database tables created!")
 
