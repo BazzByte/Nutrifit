@@ -20,8 +20,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from app.api import auth, chat
+from app.database import Base, engine
+from app.models import user, message 
+@app.on_event("startup")
+def startup():
+    Base.metadata.create_all(bind=engine)
+    print("✅ Database tables created!")
 
+from app.api import auth, chat
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(chat.router, prefix="/chat", tags=["chat"])
 
